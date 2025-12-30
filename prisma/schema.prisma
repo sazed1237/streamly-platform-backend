@@ -1,0 +1,534 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Temp {
+  id          String   @id @default(cuid())
+  created_at  DateTime @default(now())
+  email       String   @unique
+  otp         String   @unique
+  expires_at  DateTime
+  is_verified Int?     @default(0) // 0 for not verified, 1 for verified
+
+  @@map("temp")
+}
+
+enum Status {
+  active
+  inactive
+  suspended
+  expired
+  deactivated
+}
+
+enum Role {
+  normal
+  premium
+  admin
+}
+
+model User {
+  id                     String         @id @default(cuid())
+  created_at             DateTime       @default(now())
+  updated_at             DateTime       @default(now())
+  deleted_at             DateTime?
+  email                  String         @unique
+  name                   String?
+  address                String?
+  password               String?
+  
+  customer_id            String?
+  country                String?
+  gender                 String?
+  status                 Status         @default(active)
+  role                   Role           @default(normal)
+  avatar                 String?        // public URL to avatar image
+  date_of_birth          DateTime?      @db.Date
+  city                   String?
+  phone_number           String?
+  suspend_endTime        DateTime?
+  state                  String?
+  postal_code            String?
+
+  deactivation_start_date       DateTime?
+  deactivation_end_date         DateTime?
+
+  is_subscribed          Boolean?      @default(false) // for newsletter subscription
+  bio                    String?
+  is_two_factor_enabled  Int?           @default(0)
+  two_factor_secret      String? // secret key for two factor authentication
+  //notification
+  receiver_notifications Notification[] @relation("receiver")
+  sender_notifications   Notification[] @relation("sender")
+  Subscription           Subscription[]
+
+  UserPaymentMethod  UserPaymentMethod[]
+  orders             Order[]
+  PaymentTransaction PaymentTransaction[]
+
+  UserSetting UserSetting[]
+
+  EmailHistoryRecipient EmailHistoryRecipient[]
+
+
+
+  @@map("users ")
+  Rating Rating[]
+  Favourite Favourite[]
+  HelpSupport HelpSupport[]
+}
+
+model UserPaymentMethod {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  payment_method_id String?
+  checkout_id       String?
+
+  @@map("user_payment_methods")
+}
+
+model Setting {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  category    String?
+  label       String?
+  description String?
+
+  key           String? @unique
+  default_value String?
+
+  user_settings UserSetting[]
+
+  @@map("settings")
+}
+
+model UserSetting {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  setting_id String?
+  setting    Setting? @relation(fields: [setting_id], references: [id])
+
+  value String?
+
+  @@map("user_settings")
+}
+
+model PaymentTransaction {
+  id           String    @id @default(cuid())
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt           
+  deleted_at   DateTime?
+  status       String    @default("pending")   // "pending" | "requires_action" | "succeeded" | "failed" | "canceled"
+
+  // --- Relations ---
+  user_id         String?
+  user            User?        @relation(fields: [user_id], references: [id])
+
+  subscription_id String?
+  subscription    Subscription? @relation(fields: [subscription_id], references: [id])
+
+  // --- Stripe / Provider identifiers (🔒 make processing idempotent & auditable) ---
+  provider                     String?   
+  provider_payment_intent_id   String?   @unique   
+  provider_charge_id           String?              
+  provider_customer_id         String?              
+  provider_payment_method_id   String?              
+
+  // --- Financials ---
+  price          Decimal?  // your major-unit price at time of purchase (e.g., 9.99)
+  currency       String?   // e.g., "usd"
+  paid_amount    Decimal?  // actual captured amount in major units (e.g., 9.99)
+  paid_currency  String?   // e.g., "usd"
+  payment_method String?   // duplicate of pm id for convenience/audit
+
+  @@map("payment_transactions")
+}
+
+
+model NotificationEvent {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status Int?    @default(1) @db.SmallInt
+  type   String?
+  text   String?
+
+  notifications Notification[]
+
+  @@map("notification_events")
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status Int? @default(1) @db.SmallInt
+
+  sender_id String?
+  sender    User?   @relation("sender", fields: [sender_id], references: [id])
+
+  receiver_id String?
+  receiver    User?   @relation("receiver", fields: [receiver_id], references: [id])
+
+  notification_event_id String?
+  notification_event    NotificationEvent? @relation(fields: [notification_event_id], references: [id])
+
+  entity_id String?
+  read_at   DateTime?
+
+  @@map("notifications")
+}
+
+enum Plan {
+  most_popular
+  basic
+  family
+  No_plan
+}
+
+enum Payment_method {
+  No_pay
+  vredit_card
+  stripe
+  paypal
+}
+
+model Subscription {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  
+  username       String?
+  email          String?
+  price           Float?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  renewal_date   DateTime?
+  plan           Plan           @default(No_plan)
+  payment_method Payment_method @default(No_pay)
+  transaction_id String
+  status         Status         @default(active)
+
+  start_date DateTime @default(now())
+  end_date   DateTime?
+
+  PaymentTransaction PaymentTransaction[]
+
+  Order Order[]
+
+  Services Services[]
+}
+
+model Services{
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  name       String
+  description String?
+  price      Float
+  features   String[]
+  plan       Plan 
+  @@map("services")
+  Subscription Subscription[]
+}
+
+model Live_streaming {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  all_live    String[]
+  live_sports String[]
+}
+
+model Favourite {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  content_id String?
+  content    Content? @relation(fields: [content_id], references: [id])
+
+  user_id    String?
+  user       User?   @relation(fields: [user_id], references: [id])
+
+  category_id String?
+  category    Category? @relation(fields: [category_id], references: [id])
+
+  title       String?
+  thumbnail   String? // optional public URL
+  description String?
+  rating      Int?    @default(0) // rating out of 5
+  
+}
+model Admin_settings {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+}
+
+// for movie
+
+
+enum Genra {
+  action
+  adventure
+  animation
+  biography
+  comedy
+  crime
+  documentary
+  drama
+  family
+  fantasy
+  history
+  horror
+  music
+  musical
+  mystery
+  romance
+  sci_fi
+  sport
+  thriller
+  war
+  western
+}
+
+enum Content_status {
+  published
+  draft
+  uploading_local
+  uploading_s3
+  processing
+  failed
+}
+
+enum statusType {
+published
+draft
+}
+
+model Content {
+  id               String          @id @default(cuid())
+  created_at       DateTime?       @default(now())
+  updated_at       DateTime?       @updatedAt
+  description      String?
+
+  title            String?
+  genre            Genra?
+  category_id      String?
+  category         Category?       @relation(fields: [category_id], references: [id])
+  content_type     String?
+  duration         String?         // or Int
+  content_status   Content_status   @default(draft)
+
+  storage_provider String?         // "local" | "s3"
+  s3_bucket        String?
+  s3_key           String?
+  s3_thumb_key     String?
+  original_name    String?
+  file_size_bytes  BigInt?
+  etag             String?
+  checksum_sha256  String?
+  status           statusType? @default(published) 
+  type             String?       @default("4k") 
+  view_count       Int?          @default(0)
+
+  thumbnail        String?         // optional public URL
+  video            String?         // optional public URL
+  is_premium     Boolean?       @default(false) // if true, only premium users can access this content
+
+  Rating Rating[]
+
+  Favourite Favourite[]
+}
+
+model Rating {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  deleted_at DateTime?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  content_id String?
+  content   Content? @relation(fields: [content_id], references: [id])
+
+  rating Int? @default(0) 
+  comment String?
+
+  @@map("ratings")
+}
+
+
+model Category {
+  id         String    @id @default(cuid())
+  created_at DateTime?  @default(now())
+  updated_at DateTime?  @default(now())
+  deleted_at DateTime?
+  status     Int?      @default(1) @db.SmallInt
+
+  name String?
+  slug String? @unique
+
+  contents Content[]
+
+  @@map("categories")
+  Favourite Favourite[]
+}
+
+model Feature {
+  id         String    @id @default(cuid())
+  created_at DateTime?  @default(now())
+  updated_at DateTime?  @default(now())
+  deleted_at DateTime?
+  status     Int?      @default(1) @db.SmallInt
+
+  name String?
+
+  @@map("features")
+}
+
+model SecuritySettings {
+  id         String    @id @default(cuid())
+  created_at DateTime?  @default(now())
+  updated_at DateTime?  @default(now())
+  deleted_at DateTime?
+  status     Int?      @default(1) @db.SmallInt
+
+  data_export_backup    Int?
+  session_timeout       Int?
+  failed_login_attempts Int?
+  password_expiry       Int?
+
+  @@map("security_settings")
+}
+
+// this table stores Email history
+model EmailHistory {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+  status     Int?      @default(1) @db.SmallInt
+  sort_order Int?      @default(0)
+
+  type    String? // Password Reset, Email Verification, etc.
+  subject String?
+  body    String? @db.Text
+
+  email_history_recipients EmailHistoryRecipient[]
+
+  @@map("email_histories")
+}
+
+// this table stores Email history recipient
+model EmailHistoryRecipient {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  email_history_id String
+  email_history    EmailHistory? @relation(fields: [email_history_id], references: [id], onDelete: Cascade)
+
+  recipient_id String
+  recipient    User?  @relation(fields: [recipient_id], references: [id], onDelete: Cascade)
+
+  @@map("email_history_recipients")
+}
+
+enum clintStatus {
+  active
+  inactive
+}
+
+enum paymentStatus {
+  paid
+  pending
+  due
+}
+
+enum OrderStatus {
+  progress
+  completed
+  pending
+  canceled
+}
+
+model Order {
+  id         String   @id
+  created_at DateTime @default(now())
+
+  order_status OrderStatus @default(progress)
+
+  subscription_id String?
+  subscription    Subscription? @relation(fields: [subscription_id], references: [id])
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  status         clintStatus   @default(active)
+  ammount        Float?
+  user_name      String?
+  user_email     String?
+  pakage_name    String?
+  payment_status paymentStatus @default(pending)
+
+  @@map("orders")
+}
+
+
+enum HelpSupportStatus {
+  Open
+  Resolved
+}
+model HelpSupport {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  username String?
+  email    String?
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  subject String?
+  description String? @db.Text
+
+  status HelpSupportStatus @default(Open)
+
+  @@map("help_and_support")
+}

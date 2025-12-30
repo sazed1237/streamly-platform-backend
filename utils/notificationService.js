@@ -1,0 +1,102 @@
+import { PrismaClient } from "@prisma/client";
+import jwt from "jsonwebtoken";
+const prisma = new PrismaClient();
+let io;
+export const userIdSocketMap = {};
+
+export const setSocketServer = (socketIoInstance) => {
+    io = socketIoInstance;
+    initializeSocketEvents();
+};
+
+const initializeSocketEvents = () => {
+    try {
+        io.on("connection", (socket) => {
+            const token = socket.handshake.headers.auth;
+            let userId;
+            
+            try {
+                userId = jwt.verify(token, process.env.JWT_SECRET).userId;
+            } catch (error) {
+                console.log("Invalid token:", error);
+                socket.disconnect();
+                return;
+            }
+
+            userIdSocketMap[userId] = socket.id;
+            
+            socket.join(userId);
+            console.log(`User ${userId} joined room: ${userId}`);
+
+
+            // socket.on("notification", (userId)=>{
+            //    io.to(userId).emit("notification", { message: "This is a test notification", timestamp: new Date() });
+            // })
+
+            socket.on("disconnect", () => {
+                console.log(`Socket ${socket.id} disconnected for user ${userId}`);
+                delete userIdSocketMap[userId];
+            });
+        });
+    } catch (error) {
+        console.log("Socket connection error:", error);
+    }
+};
+
+const storeNotification = async (userId, message) => {
+    try {
+        const systemEmail = process.env.SYSTEM_EMAIL || process.env.ADMIN_EMAIL;
+        const systemUser = systemEmail
+            ? await prisma.user.findUnique({ where: { email: systemEmail } })
+            : null;
+
+        const notificationEvent = await prisma.notificationEvent.create({
+            data: {
+                type: "system",
+                text: message,
+                created_at: new Date(),
+            },
+        });
+
+        const notificationData = {
+            receiver: {
+                connect: { id: userId },
+            },
+            notification_event: {
+                connect: { id: notificationEvent.id },
+            },
+        };
+
+        if (systemUser?.id) {
+            notificationData.sender = {
+                connect: { id: systemUser.id },
+            };
+        }
+
+        await prisma.notification.create({
+            data: {
+                ...notificationData,
+            },
+        });
+    } catch (error) {
+        console.error("Error storing notification:", error);
+    }
+};
+
+export const sendNotification = async (userId, message) => {
+    try {
+        io.to(userId).emit("notification", {
+            message: message,
+            timestamp: new Date(),
+        });
+        
+        console.log("Notification sent to user:", userId);
+        await storeNotification(userId, message);
+    } catch (error) {
+        console.error("Error sending notification:", error);
+    }
+};
+
+export const sendWelcomeNotification = async (userId) => {
+    await sendNotification(userId, "Welcome to our platform! We're glad to have you.");
+};

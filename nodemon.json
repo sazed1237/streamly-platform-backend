@@ -1,0 +1,21 @@
+{
+  "watch": [
+    "app.js",
+    "index.js",
+    "config",
+    "constants",
+    "middlewares",
+    "modules",
+    "swagger",
+    "utils"
+  ],
+  "ignore": [
+    "swagger/openapi.json",
+    "docs/openapi.json",
+    "uploads/*",
+    "tmp_uploads/*",
+    "redis-data/*",
+    "prisma/migrations/*",
+    "node_modules/*"
+  ]
+}
